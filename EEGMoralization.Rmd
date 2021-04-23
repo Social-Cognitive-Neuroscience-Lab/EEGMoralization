@@ -116,18 +116,6 @@ mc_meta.polarized <- lmer(Polarized ~ MC + meta_d + (1|SubjectID) + (1|Issue), d
 model_summary(mc_meta.polarized)
 ```
 
-## Polarization, MC, and meta-d'
-```{r}
-mc_meta <- data_beh %>%
-  select(SubjectID, Issue, Polarized, MC, meta_d) %>%
-  drop_na() %>%
-  unite(SI, SubjectID, Issue, remove=FALSE) %>%
-  filter(!duplicated(select(., SI)))
-
-mc_meta.polarized <- lmer(Polarized ~ MC + meta_d + (1|SubjectID) + (1|Issue), data=mc_meta)
-model_summary(mc_meta.polarized)
-```
-
 ## Responses
 ```{r}
 resp_base<- lmer(Response_scale ~ (PriorSupport_scale + SocialSupport.f + ProtestOppose.f)^3 +
@@ -310,7 +298,8 @@ ma3 <- read_rds("data/eeg_photo_lpp.RDS")
 ### Prep Difference waves
 ```{r}
 eeg_covars <- m1 %>%
-  select(SubjectID:meta_d)
+  select(SubjectID:meta_d) %>%
+  filter(!duplicated(select(., SubjectID)))
 m1d <- m1 %>% 
   filter(Cluster2 != "Other") %>% 
   group_by(SubjectID, Subject, Moral, Cluster2) %>% 
@@ -447,7 +436,7 @@ ma3d <- ma3 %>%
 
 ## Issue
 
-#### EPN: 100-200
+### EPN: 100-200
 ```{r}
 m1.mlm.post.e <- lmer(Amplitude ~ Moral + Female + Age.z +
                           (1|Subject) + (1|Channel),
@@ -483,7 +472,7 @@ trend.mod <- emtrends(m1.mlm.fc.e2, ~Moral, "meta_d",
 ```
 
 
-#### MFN/N2: 300-500
+### MFN/N2: 300-500
 ```{r}
 m2.mlm.fc.e <- lmer(Amplitude ~ Moral + Female + Age.z +
                           (1|Subject) + (1|Channel),
@@ -506,7 +495,7 @@ trend.mod <- emtrends(m2.mlm.fc.e2, ~Moral, "meta_d",
 ```
 
 
-#### LPP: 600-800
+### LPP: 600-800
 ```{r}
 m3.mlm.post.e <- lmer(Amplitude ~ Moral + Female + Age.z +
                           (1|Subject) + (1|Channel),
@@ -549,7 +538,7 @@ trend.mod <- emtrends(m3.mlm.fc.e2, ~Moral, "meta_d",
 ```
 
 
-##### Conformity
+#### Conformity
 ```{r}
 m1d_m_fc <- summary(lm(Frontal ~ Conformity + Age.z + Female, data = m1d))$coefficients[2,]
 m1d_m_post <- summary(lm(Posterior ~ Conformity + Age.z + Female, data = m1d))$coefficients[2,]
@@ -588,7 +577,7 @@ ms3m <- ms3 %>%
   ungroup()
 ```
 
-#### EPN: 125-175
+### EPN: 125-175
 ```{r}
 ms1.mlm.post.e <- lmer(Amplitude ~ Moral.f * Congruent.f  +
                           Female + Age.z +
@@ -625,7 +614,7 @@ anova(ms1.mlm.fc.e, ms1.mlm.fc.e2)
 eeg_summary(ms1.mlm.fc.e2)
 ```
 
-#### MFN/N2: 200-300
+### MFN/N2: 200-300
 ```{r}
 
 ms2.mlm.post.e <- lmer(Amplitude ~ Moral.f * Congruent.f  +
@@ -648,8 +637,12 @@ ms2.mlm.fc.e2 <- lmer(Amplitude ~ (Moral.f + Congruent.f + meta_d)^2 +
 ```
 
 ```{r}
-anova(ms2.mlm.post.e, ms2.mlm.post.e2)
+anova(ms2.mlm.fc.e, ms2.mlm.fc.e2)
 ```
+```{r}
+eeg_summary(ms2.mlm.fc.e)
+```
+
 
 ```{r}
 eeg_summary(ms2.mlm.fc.e2)
@@ -678,7 +671,7 @@ trend.mod <- emtrends(ms2.mlm.fc.e2, ~Congruent.f, "meta_d",
 ```
 
 
-#### LPP: 300-500
+### LPP: 300-500
 ```{r}
 ms3.mlm.post.e <- lmer(Amplitude ~ Moral.f * Congruent.f  +
                           Female + Age.z +
@@ -740,7 +733,7 @@ emmeans(ms3.mlm.fc.e2, pairwise ~ Moral.f | Congruent.f)
 ```
 
 
-##### Conformity
+#### Conformity
 ```{r}
 ms1d_m_fc <- summary(lm(Moral_Frontal ~ Conformity + Age.z + Female, data = ms1d))$coefficients[2,]
 ms1d_m_post <- summary(lm(Moral_Posterior ~ Conformity + Age.z + Female, data = ms1d))$coefficients[2,]
@@ -808,7 +801,7 @@ ggplot(mfn_mc, aes(Conformity, Amplitude)) + geom_point() +
 
 ## Photo
 
-#### EPN: 100-200
+### EPN: 100-200
 
 ```{r}
 ma1.mlm.post.e <- lmer(Amplitude ~ Moral.f * Agree.f +
@@ -857,7 +850,7 @@ eeg_summary(ma1.mlm.fc.e)
 emmeans(ma1.mlm.fc.e, pairwise ~ Agree.f | Moral.f, data = ma1 %>% filter(Cluster2 == "Frontal"))
 ```
 
-#### MFN/N2: 200-400
+### MFN/N2: 200-400
 ```{r}
 ma2_post = ma2 %>% filter(Cluster2 == "Posterior")
 ma2_front = ma2 %>% filter(Cluster2 == "Frontal")
@@ -895,7 +888,7 @@ trend.mod <- emtrends(ma2.mlm.fc.e2, ~Moral.f, "meta_d",
 summary(trend.mod, infer = c(TRUE, TRUE), null=0)
 ```
 
-#### LPP: 400-600 
+### LPP: 400-600 
 ```{r}
 ma3_post = ma3 %>% filter(Cluster2 == "Posterior")
 ma3_front = ma3 %>% filter(Cluster2 == "Frontal")
@@ -937,7 +930,7 @@ eeg_summary(ma3.mlm.fc.e) %>% write_csv("Table_erp_pic_lpp.csv")
 ```
 
 
-##### Conformity
+#### Conformity
 ```{r}
 ma1d_m_fc <- summary(lm(Moral_Frontal ~ Conformity + Age.z + Female, data = ma1d))$coefficients[2,]
 ma1d_m_post <- summary(lm(Moral_Posterior ~ Conformity + Age.z + Female, data = ma1d))$coefficients[2,]
