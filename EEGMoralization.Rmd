@@ -20,6 +20,7 @@ require(sjstats)
 require(effectsize)
 require(parameters)
 require(emmeans)
+require(afex)
 
 set_theme(theme_classic())
 ```
@@ -27,7 +28,14 @@ set_theme(theme_classic())
 
 
 # Helper functions
-```{r}
+```{r helper_funcs}
+mixed_summary <- function(x) {
+  val <- x$anova_table
+  val$Parameter <- rownames(val)
+  val <- val %>% select(Parameter, everything())
+  return(val)
+}
+
 model_summary <- function(x) {
   params <- model_parameters(x)
   std <- standardize_parameters(x) %>%
@@ -74,7 +82,7 @@ vif.mer <- function(fit) {
 # Behavioral 
 
 ## Import data
-```{r}
+```{r import_data1}
 data_beh <- read_rds("data/data_beh.RDS")
 data_issues <- read_rds("data/data_issues.RDS")
 ```
@@ -105,7 +113,7 @@ ggplot(iss_avg, aes(reorder(IssueShort, AvgMC), AvgMC, fill=AvgMC)) +
 ```
 
 ## Polarization, MC, and meta-d'
-```{r}
+```{r init_ratings}
 mc_meta <- data_beh %>%
   select(SubjectID, Issue, Polarized, MC, meta_d) %>%
   drop_na() %>%
@@ -113,19 +121,21 @@ mc_meta <- data_beh %>%
   filter(!duplicated(select(., SI)))
 
 mc_meta.polarized <- lmer(Polarized ~ MC + meta_d + (1|SubjectID) + (1|Issue), data=mc_meta)
-model_summary(mc_meta.polarized)
+#model_summary(mc_meta.polarized)
 ```
 
 ## Responses
-```{r}
-resp_base<- lmer(Response_scale ~ (PriorSupport_scale + SocialSupport.f + ProtestOppose.f)^3 +
+```{r resps}
+resp_base<- mixed(Response_scale ~ (PriorSupport_scale + SocialSupport.f + ProtestOppose.f)^3 +
                     + Age.z + Female + (SocialSupport.f | SubjectID) + (1 | Issue),
-                  data = data_beh, control=lmerControl(optimizer="bobyqa"))
-model_summary(resp_base)
+                  data = data_beh, control=lmerControl(optimizer="bobyqa"), method="PB")
+#model_summary(resp_base)
+
+mixed_summary(resp_base) %>% write_csv("Table_beh1_support.csv")
 ```
 
 
-```{r}
+```{r resp_posthoc}
 trend.mod <- emtrends(resp_base, ~  ProtestOppose.f, "PriorSupport_scale",
                       at = c(list(PriorSupport_scale = seq(-1, 1))),
                       options = list(), lmer.df = 'satterthwaite')
@@ -133,16 +143,22 @@ summary(trend.mod, infer=c(TRUE, TRUE), null = 0)
 ```
 
 ## Aligned responses
-```{r}
+```{r aligned_resp}
+resp_align_sig <- mixed(CurrentSupport ~ (PriorSupport_scale + MajoritySupport.f +
+                  MC.z + meta_d )^3 + Age.z + Edu.z + Income.z + Female
+                + (MajoritySupport.f | SubjectID) + (1 | Issue),
+                  data = data_beh, control=lmerControl(optimizer="bobyqa"), method="PB")
 resp_align <- lmer(CurrentSupport ~ (PriorSupport_scale + MajoritySupport.f +
                   MC.z + meta_d )^3 + Age.z + Edu.z + Income.z + Female
                 + (MajoritySupport.f | SubjectID) + (1 | Issue),
                   data = data_beh, control=lmerControl(optimizer="bobyqa"))
-model_summary(resp_align)
+#model_summary(resp_align_sig)
+
+mixed_summary(resp_align_sig) %>% write_csv("Table_beh2_alignresp.csv")
 ```
 
 
-```{r}
+```{r fig2a}
 p1<-plot_model(resp_align, type="eff", terms=c("PriorSupport_scale", "MC.z[-1,1]", "MajoritySupport.f"),
            title = "Moral Conviction and Majority Support") +
   geom_hline(yintercept = 0, alpha=.3) + geom_vline(xintercept = 0, alpha=.3)+
@@ -155,7 +171,7 @@ p1 +
   labs(x = "Scaled Prior Support", y = "Scaled Rating", color="MC")
 ```
 
-```{r}
+```{r fig2b}
 p1<- plot_model(resp_align, type="eff", terms=c("PriorSupport_scale", "MC.z[-1,1]", "meta_d[-.5,.5]"),
            title="Moral Conviction * Meta-d'") +
   geom_hline(yintercept = 0, alpha=.3) + geom_vline(xintercept = 0, alpha=.3) +
@@ -170,26 +186,36 @@ p1 +
 ```
 
 ## Conformity
-```{r}
+```{r conf}
 merged_m <- data_beh %>%
   select(Conformity, Polarized, Polarized.z, MajoritySupport.f, meta_d,
          MC.z, MC, Moral, Moral.f, Age.z, Edu.z, Income.z, Female, SubjectID, Issue,
          ProtestOppose.f) %>%
   drop_na()
 
+conf_mod_sig <- mixed(Conformity ~  (MC.z + MajoritySupport.f + meta_d)^3 +
+                     Polarized.z * MajoritySupport.f +
+                   Age.z + Edu.z + Income.z + Female + (1|SubjectID) + (1|Issue),
+                 data = merged_m, method="PB")
 conf_mod <- lmer(Conformity ~  (MC.z + MajoritySupport.f + meta_d)^3 +
                      Polarized.z * MajoritySupport.f +
                    Age.z + Edu.z + Income.z + Female + (1|SubjectID) + (1|Issue),
                  data = merged_m)
+conf_moral_sig <- mixed(Conformity ~  (Moral.f + MajoritySupport.f + meta_d)^3 +
+                     Polarized.z * MajoritySupport.f +
+                   Age.z + Edu.z + Income.z + Female + (1|SubjectID) + (1|Issue),
+                 data = merged_m, method="PB")
 conf_moral <- lmer(Conformity ~  (Moral.f + MajoritySupport.f + meta_d)^3 +
                      Polarized.z * MajoritySupport.f +
                    Age.z + Edu.z + Income.z + Female + (1|SubjectID) + (1|Issue),
                  data = merged_m)
-model_summary(conf_mod)
+
+mixed_summary(conf_mod_sig) %>% write_csv("Table_beh3_conf.csv")
+#model_summary(conf_mod_sig)
 ```
 
 Polarization and social support
-```{r}
+```{r fig2c}
 p1 <- plot_model(conf_mod, type="eff", terms=c("Polarized.z", "MajoritySupport.f"), title="Polarization") +
   geom_hline(yintercept=0, alpha=.3) 
 
@@ -198,7 +224,7 @@ p1 +
   labs(x = "Standardized Polarization", color="Social Support")
 ```
 
-```{r}
+```{r conf_posthoc}
 trend.mod <- emtrends(conf_mod, ~ MajoritySupport.f, "Polarized.z",
                       at = c(list(Polarized.z = seq(-1, 1))),
                       options = list(), lmer.df = 'satterthwaite')
@@ -206,7 +232,7 @@ summary(trend.mod, infer=c(TRUE, TRUE), null = 0)
 ```
 
 Meta-d' and social support
-```{r}
+```{r fig2d}
 p1 <- plot_model(conf_mod, type="eff", terms=c("meta_d", "MajoritySupport.f"), title="Meta-d'") +
   geom_hline(yintercept=0, alpha=.3) 
 
@@ -215,7 +241,7 @@ p1 +
   labs(x = "Centered meta-d'", color="Social Support")
 ```
 
-```{r}
+```{r maj_meta_posthoc}
 trend.mod <- emtrends(conf_mod, ~ MajoritySupport.f, "meta_d",
                       at = c(list(Polarized.z = seq(-1, 1))),
                       options = list(), lmer.df = 'satterthwaite')
@@ -223,7 +249,7 @@ summary(trend.mod, infer=c(TRUE, TRUE), null = 0)
 ```
 
 Moral conviciton and social support
-```{r}
+```{r fig2e}
 p1 <- plot_model(conf_mod, type="eff", terms=c("MC.z", "MajoritySupport.f"), title="Moral Conviction") +
   geom_hline(yintercept = 0, alpha=.3) + labs(x="Centered Moral Conviction")
 p1 <- p1
@@ -232,7 +258,7 @@ p1 +
   labs(x = "Standardized Moral Conviction", y = "Conformity", color="Social Support")
 ```
 
-```{r}
+```{r maj_mc_posthoc}
 trend.mod <- emtrends(conf_mod, ~ MajoritySupport.f, "MC.z",
                       at = c(list(MC.z = seq(-1, 1))),
                       options = list(), lmer.df = 'satterthwaite')
@@ -241,7 +267,7 @@ summary(trend.mod, infer=c(TRUE, TRUE), null = 0)
 
 Moral conviction, meta-d', and social support
 
-```{r}
+```{r fig2f}
 p1 <- plot_model(conf_mod, type="eff", terms = c("MC.z", "MajoritySupport.f", "meta_d[-.5, .5]"),
            title="Moral conviction * Meta-d'") +
   geom_hline(yintercept = 0, alpha=.3) + labs(x="Centered Moral Conviction")
@@ -253,7 +279,7 @@ p1 +
   labs(x = "Standardized Moral Conviction", color="Social Support")
 ```
 
-```{r}
+```{r maj_mc_meta_posthoc}
 trend.mod <- emtrends(conf_mod, ~ meta_d * MajoritySupport.f, "MC.z",
                       at = c(list(MC.z = seq(-1, 1)),
                              list(meta_d = c(-.5, .5))),
@@ -262,7 +288,7 @@ summary(trend.mod, infer=c(TRUE, TRUE), null = 0)
 ```
 
 Save fitted conformity values
-```{r}
+```{r extract_conformity}
 conf_intercepts <- ranef(conf_moral)$SubjectID
 conf_intercepts$SubjectID <- rownames(conf_intercepts)
 conf_intercepts <- conf_intercepts %>%
@@ -283,7 +309,7 @@ conf_intercepts <- conf_intercepts %>%
 # ERP Analysis
 
 ## Import data
-```{r}
+```{r import_erp_data}
 m1 <- read_rds("data/eeg_issue_epn.RDS")
 m2 <- read_rds("data/eeg_issue_mfn.RDS")
 m3 <- read_rds("data/eeg_issue_lpp.RDS")
@@ -296,7 +322,7 @@ ma3 <- read_rds("data/eeg_photo_lpp.RDS")
 ```
 
 ### Prep Difference waves
-```{r}
+```{r diffs}
 eeg_covars <- m1 %>%
   select(SubjectID:meta_d) %>%
   filter(!duplicated(select(., SubjectID)))
@@ -437,31 +463,33 @@ ma3d <- ma3 %>%
 ## Issue
 
 ### EPN: 100-200
-```{r}
-m1.mlm.post.e <- lmer(Amplitude ~ Moral + Female + Age.z +
+```{r iss_epn_mods}
+m1.mlm.post.e <- mixed(Amplitude ~ Moral + Female + Age.z +
                           (1|Subject) + (1|Channel),
-                        data = m1 %>% filter(Cluster2 == "Posterior"))
-m1.mlm.post.e2 <- lmer(Amplitude ~ (Moral + meta_d)^2 +
+                        data = m1 %>% filter(Cluster2 == "Posterior"), method="PB")
+m1.mlm.post.e2 <- mixed(Amplitude ~ (Moral + meta_d)^2 +
                           Female + Age.z +
                           (1|Subject) + (1|Channel),
-                        data = m1 %>% filter(Cluster2 == "Posterior"))
+                        data = m1 %>% filter(Cluster2 == "Posterior"), method="PB")
 
-m1.mlm.fc.e <- lmer(Amplitude ~ Moral + Female + Age.z +
+m1.mlm.fc.e <- mixed(Amplitude ~ Moral + Female + Age.z +
                           (1|Subject) + (1|Channel),
-                        data = m1 %>% filter(Cluster2 == "Frontal"))
-m1.mlm.fc.e2 <- lmer(Amplitude ~ (Moral + meta_d)^2 + Female + Age.z +
+                        data = m1 %>% filter(Cluster2 == "Frontal"), method="PB")
+m1.mlm.fc.e2 <- mixed(Amplitude ~ (Moral + meta_d)^2 + Female + Age.z +
                           (1|Subject) + (1|Channel),
-                        data = m1 %>% filter(Cluster2 == "Frontal"))
+                        data = m1 %>% filter(Cluster2 == "Frontal"), method="PB")
 
 anova(m1.mlm.post.e, m1.mlm.post.e2)
 ```
 
 ```{r}
 eeg_summary(m1.mlm.post.e) 
+mixed_summary(m1.mlm.post.e) %>% write_csv("Table_erp_iss_epn.csv")
 ```
 
 ```{r}
 eeg_summary(m1.mlm.fc.e2) 
+mixed_summary(m1.mlm.fc.e2) %>% write_csv("Table_erp_iss_fn1.csv")
 ```
 
 ```{r}
@@ -473,18 +501,19 @@ trend.mod <- emtrends(m1.mlm.fc.e2, ~Moral, "meta_d",
 
 
 ### MFN/N2: 300-500
-```{r}
-m2.mlm.fc.e <- lmer(Amplitude ~ Moral + Female + Age.z +
+```{r iss_mfn_mods}
+m2.mlm.fc.e <- mixed(Amplitude ~ Moral + Female + Age.z +
                           (1|Subject) + (1|Channel),
-                        data = m2 %>% filter(Cluster2 == "Frontal"))
-m2.mlm.fc.e2 <- lmer(Amplitude ~ (Moral + meta_d)^2 + Female + Age.z +
+                        data = m2 %>% filter(Cluster2 == "Frontal"), method="PB")
+m2.mlm.fc.e2 <- mixed(Amplitude ~ (Moral + meta_d)^2 + Female + Age.z +
                          (1|Subject) + (1|Channel),
                        data = m2 %>% filter(Cluster2 == "Frontal"),
-                     control = lmerControl(optimizer = "bobyqa"))
+                     control = lmerControl(optimizer = "bobyqa"), method="PB")
 ```
 
 ```{r}
 eeg_summary(m2.mlm.fc.e2) 
+mixed_summary(m2.mlm.fc.e2) %>% write_csv("Table_erp_iss_mfn.csv")
 ```
 
 ```{r}
@@ -496,22 +525,22 @@ trend.mod <- emtrends(m2.mlm.fc.e2, ~Moral, "meta_d",
 
 
 ### LPP: 600-800
-```{r}
-m3.mlm.post.e <- lmer(Amplitude ~ Moral + Female + Age.z +
+```{r iss_lpp_mods}
+m3.mlm.post.e <- mixed(Amplitude ~ Moral + Female + Age.z +
                           (1|Subject) + (1|Channel),
-                        data = m3 %>% filter(Cluster2 == "Posterior"))
-m3.mlm.post.e2 <- lmer(Amplitude ~ (Moral + meta_d)^2 +
+                        data = m3 %>% filter(Cluster2 == "Posterior"), method="PB")
+m3.mlm.post.e2 <- mixed(Amplitude ~ (Moral + meta_d)^2 +
                           Female + Age.z +
                           (1|Subject) + (1|Channel),
-                        data = m3 %>% filter(Cluster2 == "Posterior"))
+                        data = m3 %>% filter(Cluster2 == "Posterior"), method="PB")
 
-m3.mlm.fc.e <- lmer(Amplitude ~ Moral + Female + Age.z +
+m3.mlm.fc.e <- mixed(Amplitude ~ Moral + Female + Age.z +
                           (1|Subject) + (1|Channel),
-                        data = m3 %>% filter(Cluster2 == "Frontal"))
-m3.mlm.fc.e2 <- lmer(Amplitude ~ (Moral + meta_d)^2 + Female + Age.z +
+                        data = m3 %>% filter(Cluster2 == "Frontal"), method="PB")
+m3.mlm.fc.e2 <- mixed(Amplitude ~ (Moral + meta_d)^2 + Female + Age.z +
                          (1|Subject) + (1|Channel),
                        data = m3 %>% filter(Cluster2 == "Frontal"),
-                     control = lmerControl(optimizer = "bobyqa"))
+                     control = lmerControl(optimizer = "bobyqa"), method="PB")
 ```
 
 ```{r}
@@ -528,6 +557,7 @@ anova(m3.mlm.fc.e, m3.mlm.fc.e2)
 
 ```{r}
 eeg_summary(m3.mlm.fc.e2) 
+mixed_summary(m3.mlm.fc.e2) %>% write_csv("Table_erp_iss_lpp.csv")
 ```
 
 ```{r}
@@ -578,28 +608,32 @@ ms3m <- ms3 %>%
 ```
 
 ### EPN: 125-175
-```{r}
-ms1.mlm.post.e <- lmer(Amplitude ~ Moral.f * Congruent.f  +
+```{r soc_epn_mods}
+epn <- ms1 %>% filter(Cluster2 %in% c("Posterior", "Frontal")) %>%
+  select(Subject, Channel, Cluster2, Amplitude, Moral.f, Congruent.f, Female, Age.z, meta_d) %>%
+  drop_na()
+ms1.mlm.post.e <- mixed(Amplitude ~ Moral.f * Congruent.f  +
                           Female + Age.z +
                           (1|Subject) + (1|Channel),
-                        data = ms1 %>% filter(Cluster2 == "Posterior"))
-ms1.mlm.post.e2 <- lmer(Amplitude ~ (Moral.f + Congruent.f + meta_d)^2 +
+                        data = epn %>% filter(Cluster2 == "Posterior"), method="PB")
+ms1.mlm.post.e2 <- mixed(Amplitude ~ (Moral.f + Congruent.f + meta_d)^2 +
                           Female + Age.z +
                           (1|Subject) + (1|Channel),
-                        data = ms1 %>% filter(Cluster2 == "Posterior"))
+                        data = epn %>% filter(Cluster2 == "Posterior"), method="PB")
 
-ms1.mlm.fc.e <- lmer(Amplitude ~ Moral.f * Congruent.f  +
+ms1.mlm.fc.e <- mixed(Amplitude ~ Moral.f * Congruent.f  +
                           Female + Age.z +
                           (1|Subject) + (1|Channel),
-                        data = ms1 %>% filter(Cluster2 == "Frontal"))
-ms1.mlm.fc.e2 <- lmer(Amplitude ~ (Moral.f + Congruent.f + meta_d)^2 +
+                        data = epn %>% filter(Cluster2 == "Frontal"), method="PB")
+ms1.mlm.fc.e2 <- mixed(Amplitude ~ (Moral.f + Congruent.f + meta_d)^2 +
                           Female + Age.z +
                           (1|Subject) + (1|Channel),
-                        data = ms1 %>% filter(Cluster2 == "Frontal"))
+                        data = epn %>% filter(Cluster2 == "Frontal"), method="PB")
 ```
 
 ```{r}
 eeg_summary(ms1.mlm.post.e)
+mixed_summary(ms1.mlm.fc.e2) %>% write_csv("Table_erp_soc_epn.csv")
 ```
 
 ```{r}
@@ -615,37 +649,41 @@ eeg_summary(ms1.mlm.fc.e2)
 ```
 
 ### MFN/N2: 200-300
-```{r}
+```{r, soc_mfn_mods, results="hide"}
+mfn <- ms2 %>% filter(Cluster2 %in% c("Posterior", "Frontal")) %>%
+  select(Subject, Channel, Cluster2, Amplitude, Moral.f, Congruent.f, Female, Age.z, meta_d) %>%
+  drop_na()
 
-ms2.mlm.post.e <- lmer(Amplitude ~ Moral.f * Congruent.f  +
+ms2.mlm.post.e <- mixed(Amplitude ~ Moral.f * Congruent.f  +
                           Female + Age.z +
                           (1|Subject) + (1|Channel),
-                        data = ms2 %>% filter(Cluster2 == "Posterior"))
-ms2.mlm.post.e2 <- lmer(Amplitude ~ (Moral.f + Congruent.f + meta_d)^2 +
+                        data = mfn %>% filter(Cluster2=="Posterior"), method="PB")
+ms2.mlm.post.e2 <- mixed(Amplitude ~ (Moral.f + Congruent.f + meta_d)^2 +
                           Female + Age.z +
                           (1|Subject) + (1|Channel),
-                        data = ms2 %>% filter(Cluster2 == "Posterior"))
+                        data = mfn %>% filter(Cluster2=="Posterior"), method="PB")
 
-ms2.mlm.fc.e <- lmer(Amplitude ~ Moral.f * Congruent.f  +
+ms2.mlm.fc.e <- mixed(Amplitude ~ Moral.f * Congruent.f  +
                           Female + Age.z +
                           (1|Subject) + (1|Channel),
-                        data = ms2 %>% filter(Cluster2 == "Frontal"))
-ms2.mlm.fc.e2 <- lmer(Amplitude ~ (Moral.f + Congruent.f + meta_d)^2 +
+                        data = mfn %>% filter(Cluster2=="Frontal"), method="PB")
+ms2.mlm.fc.e2 <- mixed(Amplitude ~ (Moral.f + Congruent.f + meta_d)^2 +
                           Female + Age.z +
                           (1|Subject) + (1|Channel),
-                        data = ms2 %>% filter(Cluster2 == "Frontal"))
+                        data = mfn %>% filter(Cluster2=="Frontal"), method="PB")
 ```
 
 ```{r}
 anova(ms2.mlm.fc.e, ms2.mlm.fc.e2)
 ```
-```{r}
-eeg_summary(ms2.mlm.fc.e)
-```
 
+```{r}
+ms2.mlm.fc.e2
+```
 
 ```{r}
 eeg_summary(ms2.mlm.fc.e2)
+mixed_summary(ms2.mlm.fc.e2) %>% write_csv("Table_erp_soc_mfn.csv")
 ```
 
 ```{r}
@@ -672,24 +710,29 @@ trend.mod <- emtrends(ms2.mlm.fc.e2, ~Congruent.f, "meta_d",
 
 
 ### LPP: 300-500
-```{r}
-ms3.mlm.post.e <- lmer(Amplitude ~ Moral.f * Congruent.f  +
-                          Female + Age.z +
-                          (1|Subject) + (1|Channel),
-                        data = ms3 %>% filter(Cluster2 == "Posterior"))
-ms3.mlm.post.e2 <- lmer(Amplitude ~ (Moral.f + Congruent.f + meta_d)^2 +
-                          Female + Age.z +
-                          (1|Subject) + (1|Channel),
-                        data = ms3 %>% filter(Cluster2 == "Posterior"))
+```{r, soc_lpp_mods}
 
-ms3.mlm.fc.e <- lmer(Amplitude ~ Moral.f * Congruent.f  +
+lpp <- ms3 %>% filter(Cluster2 %in% c("Posterior", "Frontal")) %>%
+  select(Subject, Channel, Cluster2, Amplitude, Moral.f, Congruent.f, Female, Age.z, meta_d) %>%
+  drop_na()
+
+ms3.mlm.post.e <- mixed(Amplitude ~ Moral.f * Congruent.f  +
                           Female + Age.z +
                           (1|Subject) + (1|Channel),
-                        data = ms3 %>% filter(Cluster2 == "Frontal"))
-ms3.mlm.fc.e2 <- lmer(Amplitude ~ (Moral.f + Congruent.f + meta_d)^2 +
+                        data = lpp %>% filter(Cluster2 == "Posterior"), method="PB")
+ms3.mlm.post.e2 <- mixed(Amplitude ~ (Moral.f + Congruent.f + meta_d)^2 +
                           Female + Age.z +
                           (1|Subject) + (1|Channel),
-                        data = ms3 %>% filter(Cluster2 == "Frontal"))
+                        data = lpp %>% filter(Cluster2 == "Posterior"), method="PB")
+
+ms3.mlm.fc.e <- mixed(Amplitude ~ Moral.f * Congruent.f  +
+                          Female + Age.z +
+                          (1|Subject) + (1|Channel),
+                        data = lpp %>% filter(Cluster2 == "Frontal"), method="PB")
+ms3.mlm.fc.e2 <- mixed(Amplitude ~ (Moral.f + Congruent.f + meta_d)^2 +
+                          Female + Age.z +
+                          (1|Subject) + (1|Channel),
+                        data = lpp %>% filter(Cluster2 == "Frontal"), method="PB")
 ```
 
 ```{r}
@@ -722,6 +765,7 @@ anova(ms3.mlm.fc.e, ms3.mlm.fc.e2)
 
 ```{r}
 eeg_summary(ms3.mlm.fc.e2)
+mixed_summary(ms3.mlm.fc.e2) %>% write_csv("Table_erp_soc_lpp.csv")
 ```
 
 ```{r}
@@ -789,7 +833,7 @@ msd3_lm
 ```{r}
 soc_mfn <- ms2d %>% select(Moral_Frontal, Conformity, Age.z, Female) %>% drop_na()
 mfn_mor_conf = lm(Moral_Frontal ~ Conformity + Age.z + Female, data = soc_mfn)
-model_summary(mfn_mor_conf)
+#model_summary(mfn_mor_conf)
 mfn_mor = lm(Moral_Frontal ~ Age.z + Female, data=soc_mfn)
 mfn_conf = lm(Conformity ~ Age.z + Female, data=soc_mfn)
 mfn_mc <- tibble(Amplitude = resid(mfn_mor),
@@ -803,26 +847,29 @@ ggplot(mfn_mc, aes(Conformity, Amplitude)) + geom_point() +
 
 ### EPN: 100-200
 
-```{r}
-ma1.mlm.post.e <- lmer(Amplitude ~ Moral.f * Agree.f +
+```{r pic_epn_mods}
+epn <- ma1 %>% filter(Cluster2 %in% c("Posterior", "Frontal")) %>%
+  select(Subject, Channel, Cluster2, Amplitude, Moral.f, Agree.f, Female, Age.z, meta_d) %>%
+  drop_na()
+ma1.mlm.post.e <- mixed(Amplitude ~ Moral.f * Agree.f +
                           Female + Age.z +
                           (1|Subject) + (1|Channel),
-                        data = ma1 %>% filter(Cluster2 == "Posterior"))
+                        data = epn %>% filter(Cluster2 == "Posterior"), method="PB")
 
-ma1.mlm.post.e2 <- lmer(Amplitude ~ (Moral.f + Agree.f + meta_d)^2 +
+ma1.mlm.post.e2 <- mixed(Amplitude ~ (Moral.f + Agree.f + meta_d)^2 +
                           Female + Age.z +
                           (1|Subject) + (1|Channel),
-                        data = ma1 %>% filter(Cluster2 == "Posterior"))
+                        data = epn %>% filter(Cluster2 == "Posterior"), method="PB")
 
-ma1.mlm.fc.e <- lmer(Amplitude ~ Moral.f * Agree.f +
+ma1.mlm.fc.e <- mixed(Amplitude ~ Moral.f * Agree.f +
                           Female + Age.z +
                           (1|Subject) + (1|Channel),
-                        data = ma1 %>% filter(Cluster2 == "Frontal"),
-                     control = lmerControl(optimizer = "bobyqa"))
-ma1.mlm.fc.e2 <- lmer(Amplitude ~ (Moral.f + Agree.f + meta_d)^2 +
+                        data = epn %>% filter(Cluster2 == "Frontal"),
+                     control = lmerControl(optimizer = "bobyqa"), method="PB")
+ma1.mlm.fc.e2 <- mixed(Amplitude ~ (Moral.f + Agree.f + meta_d)^2 +
                           Female + Age.z +
                           (1|Subject) + (1|Channel),
-                        data = ma1 %>% filter(Cluster2 == "Frontal"))
+                        data = epn %>% filter(Cluster2 == "Frontal"), method="PB")
 ```
 
 ```{r}
@@ -830,7 +877,8 @@ anova(ma1.mlm.post.e, ma1.mlm.post.e2)
 ```
 
 ```{r}
-eeg_summary(ma1.mlm.post.e) %>% write_csv("Table_erp_pic_epn.csv")
+eeg_summary(ma1.mlm.post.e) 
+mixed_summary(ma1.mlm.post.e) %>% write_csv("Table_erp_pic_epn.csv")
 ```
 
 ```{r}
@@ -851,26 +899,28 @@ emmeans(ma1.mlm.fc.e, pairwise ~ Agree.f | Moral.f, data = ma1 %>% filter(Cluste
 ```
 
 ### MFN/N2: 200-400
-```{r}
-ma2_post = ma2 %>% filter(Cluster2 == "Posterior")
-ma2_front = ma2 %>% filter(Cluster2 == "Frontal")
-ma2.mlm.post.e <- lmer(Amplitude ~ Moral.f * Agree.f +
-                          Female + Age.z + 
-                          (1|Subject) + (1|Channel),
-                        data = ma2_post)
-ma2.mlm.post.e2 <- lmer(Amplitude ~ (Moral.f + Agree.f + meta_d)^2 +
-                          Female + Age.z +
-                          (1|Subject) + (1|Channel),
-                        data = ma2_post)
+```{r pic_mfn_mods}
+mfn <- ma2 %>% filter(Cluster2 %in% c("Posterior", "Frontal")) %>%
+  select(Subject, Channel, Cluster2, Amplitude, Moral.f, Agree.f, Female, Age.z, meta_d) %>%
+  drop_na()
 
-ma2.mlm.fc.e <- lmer(Amplitude ~ Moral.f * Agree.f +
+ma2.mlm.post.e <- mixed(Amplitude ~ Moral.f * Agree.f +
                           Female + Age.z + 
                           (1|Subject) + (1|Channel),
-                        data = ma2_front)
-ma2.mlm.fc.e2 <- lmer(Amplitude ~ (Moral.f + Agree.f + meta_d)^2 +
+                        data = mfn %>% filter(Cluster2 == "Posterior"))
+ma2.mlm.post.e2 <- mixed(Amplitude ~ (Moral.f + Agree.f + meta_d)^2 +
                           Female + Age.z +
                           (1|Subject) + (1|Channel),
-                        data = ma2_front)
+                        data = mfn %>% filter(Cluster2 == "Posterior"))
+
+ma2.mlm.fc.e <- mixed(Amplitude ~ Moral.f * Agree.f +
+                          Female + Age.z + 
+                          (1|Subject) + (1|Channel),
+                        data = mfn %>% filter(Cluster2 == "Frontal"))
+ma2.mlm.fc.e2 <- mixed(Amplitude ~ (Moral.f + Agree.f + meta_d)^2 +
+                          Female + Age.z +
+                          (1|Subject) + (1|Channel),
+                        data = mfn %>% filter(Cluster2 == "Frontal"))
 ```
 
 ```{r}
@@ -878,7 +928,12 @@ anova(ma2.mlm.post.e, ma2.mlm.post.e2)
 ```
 
 ```{r}
+anova(ma2.mlm.fc.e, ma2.mlm.fc.e2)
+```
+
+```{r}
 eeg_summary(ma2.mlm.fc.e2) 
+mixed_summary(ma2.mlm.fc.e2) %>% write_csv("Table_erp_pic_mfn.csv")
 ```
 
 ```{r}
@@ -889,27 +944,29 @@ summary(trend.mod, infer = c(TRUE, TRUE), null=0)
 ```
 
 ### LPP: 400-600 
-```{r}
-ma3_post = ma3 %>% filter(Cluster2 == "Posterior")
-ma3_front = ma3 %>% filter(Cluster2 == "Frontal")
-ma3.mlm.post.e <- lmer(Amplitude ~ Moral.f * Agree.f +
+```{r pic_lpp_mods}
+lpp <- ma2 %>% filter(Cluster2 %in% c("Posterior", "Frontal")) %>%
+  select(Subject, Channel, Cluster2, Amplitude, Moral.f, Agree.f, Female, Age.z, meta_d) %>%
+  drop_na()
+
+ma3.mlm.post.e <- mixed(Amplitude ~ Moral.f * Agree.f +
                           Female + Age.z + 
                           (1|Subject) + (1|Channel),
-                        data = ma3_post)
-ma3.mlm.post.e2 <- lmer(Amplitude ~ (Moral.f + Agree.f + meta_d)^2 +
+                        data = lpp %>% filter(Cluster2 == "Posterior"))
+ma3.mlm.post.e2 <- mixed(Amplitude ~ (Moral.f + Agree.f + meta_d)^2 +
                           Female + Age.z +
                           (1|Subject) + (1|Channel),
-                        data = ma3_post)
+                        data = lpp %>% filter(Cluster2 == "Posterior"))
 
 
-ma3.mlm.fc.e <- lmer(Amplitude ~ Moral.f * Agree.f +
+ma3.mlm.fc.e <- mixed(Amplitude ~ Moral.f * Agree.f +
                           Female + Age.z + 
                           (1|Subject) + (1|Channel),
-                        data = ma3_front)
-ma3.mlm.fc.e2 <- lmer(Amplitude ~ (Moral.f + Agree.f + meta_d)^2 +
+                        data = lpp %>% filter(Cluster2 == "Frontal"))
+ma3.mlm.fc.e2 <- mixed(Amplitude ~ (Moral.f + Agree.f + meta_d)^2 +
                           Female + Age.z +
                           (1|Subject) + (1|Channel),
-                        data = ma3_front)
+                        data = lpp %>% filter(Cluster2 == "Frontal"))
 ```
 
 ```{r}
@@ -926,7 +983,8 @@ anova(ma3.mlm.fc.e, ma3.mlm.fc.e2)
 ```
 
 ```{r}
-eeg_summary(ma3.mlm.fc.e) %>% write_csv("Table_erp_pic_lpp.csv")
+eeg_summary(ma3.mlm.fc.e) 
+mixed_summary(ma3.mlm.fc.e) %>% write_csv("Table_erp_pic_lpp.csv")
 ```
 
 
@@ -976,7 +1034,7 @@ mad3_lm
 ```{r}
 pic_epn <- ma1d %>% select(Moral_Posterior, Conformity, Age.z, Female) %>% drop_na()
 epn_mor_conf = lm(Moral_Posterior ~ Conformity + Age.z + Female, data = pic_epn)
-model_summary(epn_mor_conf)
+#model_summary(epn_mor_conf)
 epn_mor = lm(Moral_Posterior ~ Age.z + Female, data=pic_epn)
 epn_conf = lm(Conformity ~ Age.z + Female, data=pic_epn)
 epn_mc <- tibble(Amplitude = resid(epn_mor),
