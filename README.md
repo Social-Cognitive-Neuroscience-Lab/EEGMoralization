@@ -1,11 +1,11 @@
 # EEGMoralization
 
-This repository contains analysis code, the experimental stimuli and task, and anonymized data for the paper:
+This repository contains analysis code and anonymized data for the paper:
 Moral conviction and metacognitive ability drive neural computations during social decision-making.
 
 Anonymised raw data is available on [OpenNeuro](https://openneuro.org/datasets/ds004067) doi: 10.18112/openneuro.ds004067.v1.0.1.
 
-Anonymized preprocessed data, along with behavioral tasks and scripts for extract ERPs from preprocessed data for the exploratory analysis are hosted at [OSF (doi:10.17605/OSF.IO/8KPEF)](https://doi.org/10.17605/OSF.IO/8KPEF)
+Anonymized preprocessed data, along with experimental stimuli and tasks, and scripts for extracting ERPs from preprocessed data for the exploratory analysis are hosted at [OSF (doi:10.17605/OSF.IO/8KPEF)](https://doi.org/10.17605/OSF.IO/8KPEF)
 
 ## License
 
