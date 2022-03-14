@@ -1,0 +1,275 @@
+---
+title: "Exploratory analysis"
+author: "Keith J. Yoder"
+date: "March 10, 2021"
+output:
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: '3'
+  html_notebook:
+    toc: yes
+    toc_depth: 3
+---
+
+```{r setup, include=FALSE}
+require(tidyverse)
+require(lmerTest)
+require(afex)
+require(kyutil)
+require(car)
+require(sjPlot)
+```
+
+# Helper Functions
+```{r}
+lmer_summary <- function(fit) {
+  tab <- Anova(fit)
+  out <- cbind(tibble(Parameter = rownames(tab)), tab) %>%
+    rename(p = `Pr(>Chisq)`)
+  return(out)
+}
+```
+
+
+## Import data
+```{r import_data1}
+data_beh <- read_rds("data/data_beh.RDS")
+data_issues <- read_rds("data/data_issues.RDS")
+```
+
+```{r}
+di <- data_issues %>% 
+  cluster_scale(MC, SubjectID) %>%
+  cluster_scale(Support, SubjectID) %>%
+  mutate(Subject = str_c('PM', str_sub(data_issues$SubjectID, 4, 6) ))
+di %>% glimpse()
+```
+
+```{r}
+moral_clustered <- 
+  di %>%
+  select(Subject, MC, MC_m, MC_z) %>%
+  filter(!duplicated(dplyr::select(., Subject, MC))) 
+```
+
+
+```{r}
+m1 <- read_rds("data/eeg_issue_epn.RDS")
+
+m1 %>% glimpse()
+```
+
+```{r}
+eeg_covars <- m1 %>%
+  select(SubjectID:meta_d) %>%
+  filter(!duplicated(select(., SubjectID))) 
+eeg_covars <- eeg_covars %>%
+  mutate(Subject = str_c('PM', str_sub(eeg_covars$SubjectID, 4, 6) ))
+eeg_covars %>% glimpse()
+```
+
+```{r}
+issue_erps <- read_rds('data/issue_MCs.RDS')
+social_erps <- read_rds('data/social_MCs.RDS')
+pic_erps <- read_rds('data/photo_MCs.RDS')
+```
+
+
+## Issue
+
+### EPN: 100-200
+```{r}
+d <- issue_erps %>% 
+  filter(Cluster == 'post' & ERP == 'epn')
+iss.epn.post <- lmer(uV ~ MC_z  + Female + Age.z +
+                       (MC_z|Subject) + (1|Channel), data=d,                       control = lmerControl(optimizer='bobyqa'))
+iss.epn.post2 <- lmer(uV ~ (MC_z + meta_d)^2 + Female + Age.z +
+                       (MC_z|Subject) + (1|Channel), data=d,                       control = lmerControl(optimizer='bobyqa'))
+anova(iss.epn.post, iss.epn.post2)
+```
+
+```{r}
+lmer_summary(iss.epn.post) %>% write_csv("RevTable_issue_epn_rs.csv")
+lmer_summary(iss.epn.post)
+```
+
+
+```{r}
+d <- issue_erps %>% 
+  filter(Cluster == 'front' & ERP == 'epn')
+iss.epn.front <- lmer(uV ~ MC_z  + Female + Age.z +
+                       (MC_z|Subject) + (1|Channel), data=d,                       control = lmerControl(optimizer='bobyqa'))
+iss.epn.front2 <- lmer(uV ~ (MC_z + meta_d)^2 + Female + Age.z +
+                       (MC_z|Subject) + (1|Channel), data=d,                       control = lmerControl(optimizer='bobyqa'))
+anova(iss.epn.front, iss.epn.front2)
+```
+
+```{r}
+lmer_summary(iss.epn.front2) %>% write_csv("RevTable_issue_fn1_rs.csv")
+lmer_summary(iss.epn.front2)
+```
+
+### MFN: 300-500
+```{r}
+d <- issue_erps %>% 
+  filter(Cluster == 'front' & ERP == 'mfn')
+iss.mfn.front <- lmer(uV ~ MC_z  + Female + Age.z +
+                       (MC_z|Subject) + (1|Channel), data=d,                       control = lmerControl(optimizer='bobyqa'))
+iss.mfn.front2 <- lmer(uV ~ (MC_z + meta_d)^2 + Female + Age.z +
+                       (MC_z|Subject) + (1|Channel), data=d,                       control = lmerControl(optimizer='bobyqa'))
+anova(iss.mfn.front, iss.mfn.front2)
+```
+
+```{r}
+lmer_summary(iss.mfn.front2) %>% write_csv("RevTable_issue_mfn_front_rs.csv")
+lmer_summary(iss.mfn.front2)
+```
+
+### LPP: 600-800
+```{r}
+d <- issue_erps %>% 
+  filter(Cluster == 'front' & ERP == 'lpp')
+iss.lpp.front <- lmer(uV ~ MC_z  + Female + Age.z +
+                       (MC_z|Subject) + (1|Channel), data=d,                       control = lmerControl(optimizer='bobyqa'))
+iss.lpp.front2 <- lmer(uV ~ (MC_z + meta_d)^2 + Female + Age.z +
+                       (MC_z|Subject) + (1|Channel), data=d,                       control = lmerControl(optimizer='bobyqa'))
+anova(iss.lpp.front, iss.lpp.front2)
+```
+
+```{r}
+lmer_summary(iss.lpp.front2) %>% write_csv("RevTable_issue_lpp_rs.csv")
+lmer_summary(iss.lpp.front2)
+```
+
+```{r}
+plot_model(iss.lpp.front2, type='eff', terms='MC_z') +
+  theme_classic()
+```
+
+
+
+## Social Information
+
+### EPN: 125-225
+```{r}
+d <- social_erps %>% 
+  filter(Cluster == 'post' & ERP == 'epn')
+soc.epn.post <- lmer(uV ~ MC_z * MajoritySupport  + Female + Age.z +
+                       (MC_z|Subject) + (1|Channel), data=d,                       control = lmerControl(optimizer='bobyqa'))
+soc.epn.post2 <- lmer(uV ~ (MC_z + MajoritySupport + meta_d)^2 + Female + Age.z +
+                       (MC_z|Subject) + (1|Channel), data=d,                       control = lmerControl(optimizer='bobyqa'))
+anova(soc.epn.post, soc.epn.post2)
+```
+
+```{r}
+lmer_summary(soc.epn.post2) %>% write_csv("RevTable_soc_epn_rs.csv")
+lmer_summary(soc.epn.post2)
+```
+
+
+### MFN: 200-300
+```{r}
+d <- social_erps %>% 
+  filter(Cluster == 'front' & ERP == 'mfn')
+soc.mfn.front <- lmer(uV ~ MC_z * MajoritySupport  + Female + Age.z +
+                       (MC_z|Subject) + (1|Channel), data=d,                       control = lmerControl(optimizer='bobyqa'))
+soc.mfn.front2 <- lmer(uV ~ (MC_z + MajoritySupport + meta_d)^2 + Female + Age.z +
+                       (MC_z|Subject) + (1|Channel), data=d,                       control = lmerControl(optimizer='bobyqa'))
+anova(soc.mfn.front, soc.mfn.front2)
+```
+
+```{r}
+lmer_summary(soc.mfn.front2) %>% write_csv("RevTable_soc_mfn_rs.csv")
+lmer_summary(soc.mfn.front2)
+```
+
+```{r}
+plot_model(soc.mfn.front2, type="pred", terms=c('MC_z', 'MajoritySupport')) +
+  labs(x='Standardized Moral Conviction',
+       y="Amplitude") +
+  theme_classic()
+```
+
+
+
+### LPP: 300-500
+```{r}
+d <- social_erps %>% 
+  filter(Cluster == 'front' & ERP == 'lpp')
+soc.lpp.front <- lmer(uV ~ MC_z * MajoritySupport  + Female + Age.z +
+                       (MC_z|Subject) + (1|Channel), data=d,                       control = lmerControl(optimizer='bobyqa'))
+soc.lpp.front2 <- lmer(uV ~ (MC_z + MajoritySupport + meta_d)^2 + Female + Age.z +
+                       (MC_z|Subject) + (1|Channel), data=d,                       control = lmerControl(optimizer='bobyqa'))
+anova(soc.lpp.front, soc.lpp.front2)
+```
+
+```{r}
+lmer_summary(soc.lpp.front2) %>% write_csv("RevTable_soc_lpp_rs.csv")
+lmer_summary(soc.lpp.front2)
+```
+
+```{r}
+plot_model(soc.lpp.front2, type="pred", terms=c('MC_z', 'MajoritySupport')) +
+  labs(x='Standardized Moral Conviction',
+       y="Amplitude") +
+  theme_classic()
+```
+
+
+```{r}
+plot_model(soc.lpp.front2, type="pred", terms=c('MC_z', 'MajoritySupport', 'meta_d')) +
+  labs(x='Standardized Moral Conviction',
+       y="Amplitude") +
+  theme_classic()
+```
+
+## Photograph
+
+### EPN: 100-200
+```{r}
+d <- pic_erps %>% 
+  filter(Cluster == 'post' & ERP == 'epn')
+pic.epn.post <- lmer(uV ~ MC_z * Agree + Female + Age.z +
+                       (MC_z|Subject) + (1|Channel), data=d,                       control = lmerControl(optimizer='bobyqa'))
+pic.epn.post2 <- lmer(uV ~ (MC_z + Agree + meta_d)^2 + Female + Age.z +
+                       (MC_z|Subject) + (1|Channel), data=d,                       control = lmerControl(optimizer='bobyqa'))
+anova(pic.epn.post, pic.epn.post2)
+```
+
+```{r}
+lmer_summary(pic.epn.post) %>% write_csv("RevTable_pic_epn_rs.csv")
+lmer_summary(pic.epn.post)
+```
+
+### MFN: 200-400
+```{r}
+d <- pic_erps %>% 
+  filter(Cluster == 'front' & ERP == 'mfn')
+pic.mfn.front <- lmer(uV ~ MC_z * Agree + Female + Age.z +
+                       (MC_z|Subject) + (1|Channel), data=d,                       control = lmerControl(optimizer='bobyqa'))
+pic.mfn.front2 <- lmer(uV ~ (MC_z + Agree + meta_d)^2 + Female + Age.z +
+                       (MC_z|Subject) + (1|Channel), data=d,                       control = lmerControl(optimizer='bobyqa'))
+anova(pic.mfn.front, pic.mfn.front2)
+```
+
+```{r}
+lmer_summary(pic.mfn.front2) %>% write_csv("RevTable_pic_mfn_rs.csv")
+lmer_summary(pic.mfn.front2)
+```
+
+### LPP:400-600
+```{r}
+d <- pic_erps %>% 
+  filter(Cluster == 'front' & ERP == 'lpp')
+pic.lpp.front <- lmer(uV ~ MC_z * Agree + Female + Age.z +
+                       (MC_z|Subject) + (1|Channel), data=d,                       control = lmerControl(optimizer='bobyqa'))
+pic.lpp.front2 <- lmer(uV ~ (MC_z + Agree + meta_d)^2 + Female + Age.z +
+                       (MC_z|Subject) + (1|Channel), data=d,                       control = lmerControl(optimizer='bobyqa'))
+anova(pic.lpp.front, pic.lpp.front2)
+```
+
+```{r}
+lmer_summary(pic.lpp.front) %>% write_csv("RevTable_pic_lpp_rs.csv")
+lmer_summary(pic.lpp.front)
+```
